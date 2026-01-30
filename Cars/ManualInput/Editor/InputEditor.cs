@@ -5,7 +5,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.UIElements;
 using UnityEngine;
-using EditorGUI = UnityEditor.Experimental.Networking.PlayerConnection.EditorGUI;
+//using EditorGUI = UnityEditor.Experimental.Networking.PlayerConnection.EditorGUI;
 
 [CustomEditor(typeof(ManualController))][CanEditMultipleObjects][System.Serializable]
 public class InputEditor : Editor
