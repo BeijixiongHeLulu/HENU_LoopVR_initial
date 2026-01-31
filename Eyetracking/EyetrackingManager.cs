@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using Tobii.XR;
+//using Tobii.XR;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using ViveSR.anipal.Eye;
+//using ViveSR.anipal.Eye;
 
 public class EyetrackingManager : MonoBehaviour
 {
@@ -82,11 +82,24 @@ public class EyetrackingManager : MonoBehaviour
     {
         _eyetrackingValidation.StartValidation(delay);
     }
-    
-    
+
+
+    //public void StartCalibration()
+    //{
+    //    if (SRanipal_Eye_v2.LaunchEyeCalibration())
+    //    {
+    //        Debug.Log("<color=green>calibration successful :)</color>");
+    //        CalibrationManager.Instance.EyeCalibrationSuccessful();
+    //    }
+    //    else
+    //    {
+    //        Debug.Log("<color=red>calibration failed :(</color>");
+    //    }
+    //}
     public void StartCalibration()
     {
-        if (SRanipal_Eye_v2.LaunchEyeCalibration())
+        // --- 修改开始：屏蔽旧SDK，直接返回成功 ---
+        /* if (SRanipal_Eye_v2.LaunchEyeCalibration())
         {
             Debug.Log("<color=green>calibration successful :)</color>");
             CalibrationManager.Instance.EyeCalibrationSuccessful();
@@ -95,6 +108,16 @@ public class EyetrackingManager : MonoBehaviour
         {
             Debug.Log("<color=red>calibration failed :(</color>");
         }
+        */
+
+        // 模拟校准成功，通知 LoopVR 系统继续流程
+        Debug.Log("<color=green>Mock Calibration (Pico/VRCFT) successful :)</color>");
+        // 确保 CalibrationManager 存在且实例不为空，避免报错
+        if (CalibrationManager.Instance != null)
+        {
+            CalibrationManager.Instance.EyeCalibrationSuccessful();
+        }
+        // --- 修改结束 ---
     }
 
     public void StartRecording()
