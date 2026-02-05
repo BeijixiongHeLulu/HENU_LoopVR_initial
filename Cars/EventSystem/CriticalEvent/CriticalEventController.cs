@@ -29,7 +29,7 @@ public class CriticalEventController : MonoBehaviour
     [Header("Event Setting")]
     [Tooltip("Time the car needs from informing the driver to giving them the control. (0 - 15 seconds)")]
     [Range(0, 15)]
-    [SerializeField] private float startEventDelay = 2.5f;
+    [SerializeField] public float startEventDelay = 2.5f;
 
     [Tooltip("Time the car needs from informing the driver to taking back the control. (0 - 10 seconds)")]
     [Range(0, 10)]
