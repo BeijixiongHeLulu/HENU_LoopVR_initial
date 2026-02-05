@@ -2,49 +2,44 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using Tobii.XR;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using ViveSR.anipal.Eye;
-using Valve.VR;
-using Valve.VR.InteractionSystem;
+// 【修改 1】移除 Tobii 引用，防止编译错误
+// using Tobii.XR;
+// using ViveSR.anipal.Eye;
+using LoopAr.Connector; // 引入你的 Connector 命名空间
 
 public class EyetrackingDataRecorder : MonoBehaviour
 {
-    // Start is called before the first frame update
     private float _sampleRate;
     private List<EyeTrackingDataFrame> _recordedEyeTrackingData;
     private List<float> _frameRates;
     private EyetrackingManager _eyetrackingManager;
     private Transform _hmdTransform;
     private bool recordingEnded;
+
     void Start()
     {
         SceneManager.sceneLoaded += OnSceneLoaded;
-        _recordedEyeTrackingData= new List<EyeTrackingDataFrame>();
-        
-        _eyetrackingManager= EyetrackingManager.Instance;
-        
-        _sampleRate = _eyetrackingManager.GetSampleRate();
-        _hmdTransform = _eyetrackingManager.GetHmdTransform();
-    }
+        _recordedEyeTrackingData = new List<EyeTrackingDataFrame>();
 
-    void Update()
-    {
-        /*if (Input.GetKeyDown(KeyCode.P))
+        _eyetrackingManager = EyetrackingManager.Instance;
+
+        if (_eyetrackingManager != null)
         {
-            Visualisation();
-            Debug.Log("<color=green>Visualisation activated!</color>");
-        }*/
-    }
-    
-    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)  // generally I am not proud of this call, but seems necessary for the moment.
-    {
-        _hmdTransform = _eyetrackingManager.GetHmdTransform();        //refresh the HMD transform after sceneload;
-        //Debug.Log("hello new World");
+            _sampleRate = _eyetrackingManager.GetSampleRate();
+            _hmdTransform = _eyetrackingManager.GetHmdTransform();
+        }
     }
 
-    
+    void Update() { }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (_eyetrackingManager != null)
+            _hmdTransform = _eyetrackingManager.GetHmdTransform();
+    }
+
     public void StartRecording()
     {
         recordingEnded = false;
@@ -58,70 +53,83 @@ public class EyetrackingDataRecorder : MonoBehaviour
 
     public void ClearEyeTrackingDataRecordings()
     {
-        _recordedEyeTrackingData.Clear();
+        if (_recordedEyeTrackingData != null)
+            _recordedEyeTrackingData.Clear();
     }
-    
+
     private IEnumerator RecordEyeTrackingData()
     {
-        int frameCounter = new int();
-        Debug.Log("<color=green>Start recording...</color>");
-        
+        int frameCounter = 0;
+        Debug.Log("<color=green>Start recording (Pico Mode)...</color>");
+
         _frameRates = new List<float>();
-        
+
         while (!recordingEnded)
         {
             EyeTrackingDataFrame dataFrame = new EyeTrackingDataFrame();
-            var eyeTrackingDataWorld = TobiiXR.GetEyeTrackingData(TobiiXR_TrackingSpace.World);
-            var eyeTrackingDataLocal = TobiiXR.GetEyeTrackingData(TobiiXR_TrackingSpace.Local);
 
-            if (eyeTrackingDataWorld.GazeRay.IsValid)
+            // 【修改 2】核心替换：用 EyeTrackingConnector 替换 TobiiXR
+            // 原代码：var eyeTrackingDataWorld = TobiiXR.GetEyeTrackingData(...)
+
+            // 获取注视射线
+            Ray gazeRay = EyeTrackingConnector.RequestCombinedGazeRay();
+
+            // 获取睁眼/闭眼数据 (用于判断眨眼)
+            float leftOpen, rightOpen;
+            EyeTrackingConnector.ShowEyeOpenness(out leftOpen, out rightOpen);
+            // 简单阈值判断眨眼 (如果开度小于 0.1 则认为闭眼)
+            bool leftBlink = leftOpen < 0.1f;
+            bool rightBlink = rightOpen < 0.1f;
+
+            // 填充数据 (World Space)
+            // 既然 Ray.origin 通常就是 EyePosition，我们直接用
+            dataFrame.EyePosWorldCombined = gazeRay.origin;
+            dataFrame.EyeDirWorldCombined = gazeRay.direction;
+            dataFrame.LeftEyeIsBlinkingWorld = leftBlink;
+            dataFrame.RightEyeIsBlinkingWorld = rightBlink;
+
+            // 获取物体碰撞信息
+            dataFrame.hitObjects = GetHitObjectsFromGaze(gazeRay.origin, gazeRay.direction);
+
+            // Local Space 数据填充 (将 World 转回 Camera Local)
+            if (Camera.main != null)
             {
-                Vector3 gazeRayOrigin = eyeTrackingDataWorld.GazeRay.Origin;
-                Vector3 gazeRayDirection = eyeTrackingDataWorld.GazeRay.Direction;
-                dataFrame.TobiiTimeStamp = eyeTrackingDataWorld.Timestamp;
-                dataFrame.EyePosWorldCombined = gazeRayOrigin;
-                dataFrame.EyeDirWorldCombined = gazeRayDirection;
-
-                dataFrame.LeftEyeIsBlinkingWorld = eyeTrackingDataWorld.IsLeftEyeBlinking;
-                dataFrame.RightEyeIsBlinkingWorld = eyeTrackingDataWorld.IsRightEyeBlinking;
-
-                dataFrame.hitObjects = GetHitObjectsFromGaze(gazeRayOrigin, gazeRayDirection);
+                dataFrame.EyePosLocalCombined = Camera.main.transform.InverseTransformPoint(gazeRay.origin);
+                dataFrame.EyeDirLocalCombined = Camera.main.transform.InverseTransformDirection(gazeRay.direction);
+                dataFrame.LeftEyeIsBlinkingLocal = leftBlink;
+                dataFrame.RightEyeIsBlinkingLocal = rightBlink;
             }
 
-            if (eyeTrackingDataLocal.GazeRay.IsValid)
+            // 通用数据填充
+            dataFrame.TobiiTimeStamp = Time.time; // 用 Unity 时间代替 Tobii 时间戳
+            dataFrame.UnixTimeStamp = TimeManager.Instance != null ? TimeManager.Instance.GetCurrentUnixTimeStamp() : DateTime.Now.Ticks;
+
+            if (SavingManager.Instance != null)
+                dataFrame.FPS = SavingManager.Instance.GetCurrentFPS();
+
+            if (EyetrackingManager.Instance != null && EyetrackingManager.Instance.GetHmdTransform() != null)
             {
-                dataFrame.EyePosLocalCombined = eyeTrackingDataLocal.GazeRay.Origin;
-                dataFrame.EyeDirLocalCombined = eyeTrackingDataLocal.GazeRay.Direction;
-                dataFrame.LeftEyeIsBlinkingLocal = eyeTrackingDataLocal.IsLeftEyeBlinking;
-                dataFrame.RightEyeIsBlinkingLocal = eyeTrackingDataLocal.IsRightEyeBlinking;
+                dataFrame.HmdPosition = EyetrackingManager.Instance.GetHmdTransform().position;
+                dataFrame.NoseVector = EyetrackingManager.Instance.GetHmdTransform().forward;
             }
 
-            dataFrame.UnixTimeStamp = TimeManager.Instance.GetCurrentUnixTimeStamp();
-            
-            dataFrame.FPS = SavingManager.Instance.GetCurrentFPS();
-            
-            dataFrame.HmdPosition = EyetrackingManager.Instance.GetHmdTransform().position;
-
-            dataFrame.NoseVector =  EyetrackingManager.Instance.GetHmdTransform().forward;
-            
             _frameRates.Add(dataFrame.FPS);
             _recordedEyeTrackingData.Add(dataFrame);
             frameCounter++;
-            
+
             yield return new WaitForSeconds(_sampleRate);
         }
     }
 
-
     private List<HitObjectInfo> GetHitObjectsFromGaze(Vector3 gazeOrigin, Vector3 gazeDirection)
     {
+        // 增加层级遮罩或忽略 Trigger，防止射线打到不该打的东西 (可选优化)
         RaycastHit[] hitColliders = Physics.RaycastAll(gazeOrigin, gazeDirection);
-        
-        List<HitObjectInfo> hitObjectInfoList= new List<HitObjectInfo>();
-        
+
+        List<HitObjectInfo> hitObjectInfoList = new List<HitObjectInfo>();
+
         foreach (var colliderhit in hitColliders)
         {
-                    
             HitObjectInfo hitInfo = new HitObjectInfo();
             hitInfo.ObjectName = colliderhit.collider.gameObject.name;
             hitInfo.HitObjectPosition = colliderhit.collider.transform.position;
@@ -132,57 +140,15 @@ public class EyetrackingDataRecorder : MonoBehaviour
         return hitObjectInfoList;
     }
 
-    private List<HitObjectInfo> GetFirstHitObjectFromGaze(Vector3 gazeOrigin, Vector3 gazeDirection, float distance)
-    {
-        RaycastHit hit;
-        bool hitColliders = Physics.Raycast(gazeOrigin, gazeDirection, out hit, distance);
-        
-        List<HitObjectInfo> hitObjectInfoList= new List<HitObjectInfo>();
-
-        if (hitColliders)
-        {
-            HitObjectInfo hitInfo = new HitObjectInfo();
-            hitInfo.ObjectName = hit.collider.gameObject.name;
-            hitInfo.HitObjectPosition = hit.collider.transform.position;
-            hitInfo.HitPointOnObject = hit.point;
-            hitObjectInfoList.Add(hitInfo);
-        }
-
-        return hitObjectInfoList;
-    }
-
-
     public List<EyeTrackingDataFrame> GetDataFrames()
     {
-        if (recordingEnded)
-        {
-            return _recordedEyeTrackingData;
-        }
-        else
-        {
-            throw new Exception("Eyetracking Data Recording has not been finished");
-        }
+        return _recordedEyeTrackingData;
     }
 
     public float GetAverageFrameRate()
     {
-        return _frameRates.Average();
-    }
-
-    private void Visualisation()
-    {
-        List<EyeTrackingDataFrame> dataFrames = GetDataFrames();
-
-        foreach (var dataFrame in dataFrames)
-        {
-            if (dataFrame.hitObjects != null)
-            {
-                foreach (var item in dataFrame.hitObjects)
-                {
-                    Debug.Log(item.ObjectName);
-                    Debug.DrawLine(dataFrame.HmdPosition, item.HitPointOnObject, Color.red, 60f);
-                }
-            }
-        }
+        if (_frameRates != null && _frameRates.Count > 0)
+            return _frameRates.Average();
+        return 0f;
     }
 }

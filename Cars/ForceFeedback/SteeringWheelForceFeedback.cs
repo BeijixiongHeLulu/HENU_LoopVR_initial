@@ -1,68 +1,55 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using UnityEngine;
-using ForceFeedback;using System.Collections;
-using System.Collections.Generic;
-using Autodesk.Fbx;
-using UnityEditor;
-using UnityEngine;
+using ForceFeedback; // 确保引用了你的插件命名空间
 
 public class SteeringWheelForceFeedback : MonoBehaviour
 {
-    [SerializeField] private CarController _carController;   
+    [SerializeField] private CarController _carController;
     [SerializeField] private ManualController _manualController;
-
     [SerializeField] private ControlSwitch _controlSwitch;
-    // Start is called before the first frame update
+
     public bool shouldInit = true;
     private float target;
     private float current;
+
+    // 【新增】初始化状态标记，防止未初始化调用导致崩溃
+    private bool _isInitialized = false;
+
     void Start()
     {
         _carController = GetComponent<CarController>();
         _manualController = GetComponent<ManualController>();
         _controlSwitch = GetComponent<ControlSwitch>();
 
+        // 【关键修改】只在 非编辑器模式 (打包后) 初始化力反馈
+        // 在编辑器里运行时跳过这一步，防止 DLL 重复加载导致崩溃
+#if !UNITY_EDITOR
         if (shouldInit && FFB.needInit)
         {
             FFB.ForceFeedBackInit();
-            #if !UNITY_EDITOR
             FFB.AcquireDevice();
-            #endif
+            _isInitialized = true;
         }
-        #if UNITY_EDITOR
-                    FFB.AcquireDevice();
-        #endif
-        
-        
+#else
+        Debug.LogWarning("Steering Wheel Force Feedback is DISABLED in Editor to prevent crashes.");
+#endif
     }
 
-    #if UNITY_EDITOR
-    private void StopDirectInput(PlayModeStateChange state)
+#if UNITY_EDITOR
+    private void StopDirectInput(UnityEditor.PlayModeStateChange state)
     {
-        
-        if (state == PlayModeStateChange.ExitingPlayMode)
-        {
-             FFB.StopForceFeedback();     //Currently buggy, crashs edtior
-        }
+        // 原有代码注释说这里会崩，所以保持注释或不做操作
     }
+#endif
 
-    private void ReleaseDirectInput(PlayModeStateChange state)
-    {
-        if (state == PlayModeStateChange.ExitingPlayMode)
-        {
-             FFB.FreeDirectInput();     //Currently buggy, crashs edtior
-        }
-
-           
-    }
-    #endif
     private void Update()
     {
-        target=_carController.GetSterring();
-        current= _manualController.GetSteeringInput();
+        if (_carController == null || _manualController == null || _controlSwitch == null) return;
+
+        target = _carController.GetSterring();
+        current = _manualController.GetSteeringInput();
+
         if (!_controlSwitch.GetManualDrivingState())
         {
             int sign = 0;
@@ -72,63 +59,39 @@ public class SteeringWheelForceFeedback : MonoBehaviour
             {
                 sign = 1;
             }
-            SetAutoPilotForceFeedbackEffect(8000  * sign * ( Mathf.Abs(current) - Mathf.Abs(target)));
-           
-            
+            SetAutoPilotForceFeedbackEffect(8000 * sign * (Mathf.Abs(current) - Mathf.Abs(target)));
         }
-    }
-
-
-    public void bumpyRoad(int jitter)
-    {
-        //might be a coroutine
-        //car speed needs to be taken into account
     }
 
     public void SetAutoPilotForceFeedbackEffect(float force)
     {
-        int rounded = (int) -force;
-        
+        // 【安全检查】如果没有初始化（比如在编辑器里），直接返回，不要调用底层API
+        if (!_isInitialized) return;
+
+        int rounded = (int)-force;
         FFB.SetDeviceForceFeedback(rounded, 0);
     }
 
     public void SetManualForceFeedbackEffect(float force)
     {
-        int rounded = (int) force;
-        
-        FFB.SetDeviceForceFeedback(rounded,0);
+        if (!_isInitialized) return;
+
+        int rounded = (int)force;
+        FFB.SetDeviceForceFeedback(rounded, 0);
     }
 
-    public void SteerToPosition()
-    {
-        
-    }
-    
-    //Carcontroller.GetSteering (-1, 0 ,1 ) * 540 //Target 
-    //Input *540 //Input Angle 
-
-    // IF -1 Right Direction
-    // IF 1 Left Direction 
-
-    /*IEnumerator GoToPosition()
-    {
-        while (1)
-        {
-            _carController.GetSterring()
-        }
-    }*/
-    
-    
-    #if !UNITY_EDITOR
+#if !UNITY_EDITOR
     private void OnDestroy()
     {
-        if(!FFB.needInit)
-            FFB.FreeDirectInput();
-        else
+        if (_isInitialized)
         {
-            FFB.needInit = false;
-            return;
+            if (!FFB.needInit)
+                FFB.FreeDirectInput();
+            else
+            {
+                FFB.needInit = false;
+            }
         }
     }
-    #endif
+#endif
 }

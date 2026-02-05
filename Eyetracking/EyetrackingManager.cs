@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-//using Tobii.XR;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-//using ViveSR.anipal.Eye;
+// 【修改 1】彻底移除 Tobii 和 Vive 的引用
+// using Tobii.XR; 
+// using ViveSR.anipal.Eye;
 
 public class EyetrackingManager : MonoBehaviour
 {
@@ -24,115 +25,90 @@ public class EyetrackingManager : MonoBehaviour
     private float eyeValidationDelay;
 
     private Vector3 _eyeValidationErrorAngles;
-    
+
     public delegate void OnCompletedEyeValidation(bool wasSuccessful);
     public event OnCompletedEyeValidation NotifyEyeValidationCompletnessObservers;
-    
+
     private void Awake()
     {
         SceneManager.sceneLoaded += OnSceneLoaded;
-        _sampleRate = 1f / SetSampleRate; 
-        //singleton pattern a la Unity
+        _sampleRate = 1f / SetSampleRate;
+
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject);         //the Eyetracking Manager should be persitent by changing the scenes maybe change it on the the fly
+            DontDestroyOnLoad(gameObject);
         }
         else
         {
             Destroy(gameObject);
         }
-        
-        
-        //  I do not like this: we still needs tags to find that out.
     }
 
-    private void  OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        _hmdTransform = Camera.main.transform;
-        //Debug.Log("hello new World");
+        if (Camera.main != null)
+        {
+            _hmdTransform = Camera.main.transform;
+        }
     }
 
-    // Start is called before the first frame update
     void Start()
     {
-        
         _eyeTrackingRecorder = GetComponent<EyetrackingDataRecorder>();
-
         _eyetrackingValidation = GetComponentInChildren<EyetrackingValidation>();
 
-        _eyetrackingValidation.NotifyEyeValidationObservers += SetEyeValidationStatus;
+        if (_eyetrackingValidation != null)
+        {
+            _eyetrackingValidation.NotifyEyeValidationObservers += SetEyeValidationStatus;
+        }
     }
-
-    // Update is called once per frame
 
     public void StartValidation()
     {
         Debug.Log("validating...");
-        _eyetrackingValidation.StartValidation(eyeValidationDelay);
+        if (_eyetrackingValidation != null)
+            _eyetrackingValidation.StartValidation(eyeValidationDelay);
     }
 
     public void AbortValidation()
     {
-        _eyetrackingValidation.AbortValidation();
+        if (_eyetrackingValidation != null)
+            _eyetrackingValidation.AbortValidation();
         NotifyEyeValidationCompletnessObservers?.Invoke(false);
     }
 
     public void StartValidation(float delay)
     {
-        _eyetrackingValidation.StartValidation(delay);
+        if (_eyetrackingValidation != null)
+            _eyetrackingValidation.StartValidation(delay);
     }
 
-
-    //public void StartCalibration()
-    //{
-    //    if (SRanipal_Eye_v2.LaunchEyeCalibration())
-    //    {
-    //        Debug.Log("<color=green>calibration successful :)</color>");
-    //        CalibrationManager.Instance.EyeCalibrationSuccessful();
-    //    }
-    //    else
-    //    {
-    //        Debug.Log("<color=red>calibration failed :(</color>");
-    //    }
-    //}
     public void StartCalibration()
     {
-        // --- 修改开始：屏蔽旧SDK，直接返回成功 ---
-        /* if (SRanipal_Eye_v2.LaunchEyeCalibration())
-        {
-            Debug.Log("<color=green>calibration successful :)</color>");
-            CalibrationManager.Instance.EyeCalibrationSuccessful();
-        }
-        else
-        {
-            Debug.Log("<color=red>calibration failed :(</color>");
-        }
-        */
-
-        // 模拟校准成功，通知 LoopVR 系统继续流程
+        // 【修改 2】使用“虚拟校准成功”逻辑，绕过 Tobii/Vive
         Debug.Log("<color=green>Mock Calibration (Pico/VRCFT) successful :)</color>");
-        // 确保 CalibrationManager 存在且实例不为空，避免报错
+
         if (CalibrationManager.Instance != null)
         {
             CalibrationManager.Instance.EyeCalibrationSuccessful();
         }
-        // --- 修改结束 ---
     }
 
     public void StartRecording()
     {
         Debug.Log("<color=green>Recording eye-tracking Data!</color>");
-        _eyeTrackingRecorder.StartRecording();
+        if (_eyeTrackingRecorder != null)
+            _eyeTrackingRecorder.StartRecording();
     }
-    
+
     public void StopRecording()
     {
-        _eyeTrackingRecorder.StopRecording();
+        if (_eyeTrackingRecorder != null)
+            _eyeTrackingRecorder.StopRecording();
         StoreEyeTrackingData();
     }
-    
-    
+
     public Transform GetHmdTransform()
     {
         return _hmdTransform;
@@ -152,11 +128,11 @@ public class EyetrackingManager : MonoBehaviour
     {
         return _eyeValidationErrorAngles;
     }
-    
 
     private void StoreEyeTrackingData()
     {
-        _eyeTrackingDataFrames = _eyeTrackingRecorder.GetDataFrames();
+        if (_eyeTrackingRecorder != null)
+            _eyeTrackingDataFrames = _eyeTrackingRecorder.GetDataFrames();
     }
 
     public List<EyeTrackingDataFrame> GetEyeTrackingData()
@@ -167,7 +143,8 @@ public class EyetrackingManager : MonoBehaviour
         }
         else
         {
-            throw new Exception("There are no Eyetrackingdata");
+            // 如果没有数据，返回空列表而不是报错，更安全
+            return new List<EyeTrackingDataFrame>();
         }
     }
 
@@ -175,30 +152,22 @@ public class EyetrackingManager : MonoBehaviour
     {
         Debug.Log("eyeValidation Status was called in EyeTrackingManager with " + eyeValidationWasSucessfull);
         _eyeValidationSucessful = eyeValidationWasSucessfull;
-        
-        if (!eyeValidationWasSucessfull)
-        {
-            _eyeValidationErrorAngles = errorAngles;
-            NotifyEyeValidationCompletnessObservers?.Invoke(false);
-            
-        }
-        else
-        {
-            _eyeValidationErrorAngles = errorAngles;
-            NotifyEyeValidationCompletnessObservers?.Invoke(true);
-        }
+        _eyeValidationErrorAngles = errorAngles;
+        NotifyEyeValidationCompletnessObservers?.Invoke(eyeValidationWasSucessfull);
     }
 
     public float GetAverageSceneFPS()
     {
-        return _eyeTrackingRecorder.GetAverageFrameRate();
+        if (_eyeTrackingRecorder != null)
+            return _eyeTrackingRecorder.GetAverageFrameRate();
+        return 0f;
     }
 
     public bool GetEyeValidationStatus()
     {
         return _eyeValidationSucessful;
     }
-    
+
     public double getCurrentTimestamp()
     {
         System.DateTime epochStart = new System.DateTime(1970, 1, 1, 0, 0, 0, System.DateTimeKind.Utc);

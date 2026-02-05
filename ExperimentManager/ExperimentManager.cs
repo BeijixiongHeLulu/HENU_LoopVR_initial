@@ -15,17 +15,18 @@ public class ExperimentManager : MonoBehaviour
 
     public static ExperimentManager Instance { get; private set; }
 
-    [Space] [Header("Necessary Elements")]
+    [Space]
+    [Header("Necessary Elements")]
     private GameObject _participantsCar;
-    [Tooltip("0 to 10 seconds")] [Range(0, 10)] [SerializeField] private float startExperimentDelay = 3f;
-    [Tooltip("0 to 10 seconds")] [Range(0, 10)] [SerializeField] private float respawnDelay = 5f;
+    [Tooltip("0 to 10 seconds")][Range(0, 10)][SerializeField] private float startExperimentDelay = 3f;
+    [Tooltip("0 to 10 seconds")][Range(0, 10)][SerializeField] private float respawnDelay = 5f;
 
     private enum Scene
     {
         MainMenu,
         Experiment
     }
-    
+
     private List<ActivationTrigger> _activationTriggers;
     private CriticalEventController _criticalEventController;
     private Vector3 _respawnPosition;
@@ -34,15 +35,18 @@ public class ExperimentManager : MonoBehaviour
     private bool _activatedEvent;
     private bool _vRScene;
     private bool _isStartPressed;
-    
+
+    // 【关键修改】状态锁：一旦为 true，彻底屏蔽 OnGUI
+    private bool _isAborting = false;
+
     #endregion
 
     #region Private Methods
-    
+
     private void Awake()
     {
         _activationTriggers = new List<ActivationTrigger>();
-        
+
         //singleton pattern a la Unity
         if (Instance == null)
         {
@@ -56,7 +60,7 @@ public class ExperimentManager : MonoBehaviour
 
         if (SavingManager.Instance != null)
         {
-            SavingManager.Instance.SetParticipantCar(_participantsCar);    
+            SavingManager.Instance.SetParticipantCar(_participantsCar);
         }
     }
 
@@ -73,7 +77,7 @@ public class ExperimentManager : MonoBehaviour
     private void Start()
     {
         _vRScene = CalibrationManager.Instance.GetVRActivationState();
-        
+
         if (_activationTriggers.Count == 0)
         {
             Debug.Log("<color=red>Error: </color>Please ensure that ActivationTrigger is being executed before ExperimentManager if there are triggers present in the scene.");
@@ -83,22 +87,22 @@ public class ExperimentManager : MonoBehaviour
         {
             Debug.Log("<color=red>Error: </color>EyetrackingManager should be present in the scene.");
         }
-        
+
         if (CalibrationManager.Instance == null)
         {
             Debug.Log("<color=red>Error: </color>CalibrationManager should be present in the scene.");
         }
-        
+
         if (SavingManager.Instance == null)
         {
             Debug.Log("<color=red>Error: </color>SavingManager should be present in the scene.");
         }
-        
+
         if (CameraManager.Instance == null)
         {
             Debug.Log("<color=red>Error: </color>CameraManager should be present in the scene.");
         }
-        
+
         try
         {
             InformTriggers();
@@ -112,13 +116,53 @@ public class ExperimentManager : MonoBehaviour
         }
     }
 
+    // 【新增】安全中止协程
+    private IEnumerator AbortSequence()
+    {
+        _isAborting = true; // 1. 立即上锁，OnGUI 下一帧起将不再执行
+
+        // 2. 降低负载：先关掉车辆物理和引擎
+        if (_participantsCar != null)
+        {
+            var rb = _participantsCar.GetComponent<Rigidbody>();
+            if (rb != null) rb.isKinematic = true;
+            var ctrl = _participantsCar.GetComponent<CarController>();
+            if (ctrl != null) ctrl.TurnOffEngine();
+        }
+
+        // 3. 保存数据
+        if (SavingManager.Instance != null)
+        {
+            SavingManager.Instance.StopAndSaveData(SceneManager.GetActiveScene().name);
+        }
+
+        Debug.Log("Aborting... Waiting for data save (3s)...");
+
+        // 4. 长等待：给 OpenXR 3秒钟时间来处理后台事务，防止 Device Lost
+        yield return new WaitForSeconds(3.0f);
+
+        // 5. 执行跳转
+        if (CalibrationManager.Instance != null)
+        {
+            CalibrationManager.Instance.AbortExperiment();
+        }
+
+        // 注意：这里不需要把 _isAborting 设回 false，因为场景即将卸载/重载
+    }
+
     private void RunMainMenu()
     {
         _scene = Scene.MainMenu;
-        _participantsCar.GetComponent<Rigidbody>().isKinematic = true;
-        _participantsCar.GetComponent<CarController>().TurnOffEngine();
+        if (_participantsCar != null)
+        {
+            if (_participantsCar.GetComponent<Rigidbody>() != null)
+                _participantsCar.GetComponent<Rigidbody>().isKinematic = true;
+
+            if (_participantsCar.GetComponent<CarController>() != null)
+                _participantsCar.GetComponent<CarController>().TurnOffEngine();
+        }
     }
-    
+
     // inform all triggers to disable their game objects at the beginning of the experiment
     private void InformTriggers()
     {
@@ -127,22 +171,22 @@ public class ExperimentManager : MonoBehaviour
             trigger.DeactivateTheGameObjects();
         }
     }
-    
+
     // starting the experiment
     private IEnumerator StartExperiment()
     {
         string condition = ConditionManager.Instance.GetExperimentalCondition();
-        
+
         if (condition == "BaseCondition" || condition == "AudioOnly")
         {
-            // Debug.Log("Condition in EXP is BaseCondition or AudioOnly?: " + ConditionManager.Instance.GetExperimentalCondition());
-            _participantsCar.GetComponentInChildren<HUD_Advance>().ShutDownAllVisualsPermanently();
+            var hud = _participantsCar.GetComponentInChildren<HUD_Advance>();
+            if (hud != null) hud.ShutDownAllVisualsPermanently();
         }
-        
+
         TimeManager.Instance.SetExperimentStartTime();
         _isStartPressed = true;
         while (SceneLoadingHandler.Instance.GetAdditiveLoadingState()) yield return null;
-        
+
         _scene = Scene.Experiment;
 
         SavingManager.Instance.StartRecordingData();
@@ -151,20 +195,20 @@ public class ExperimentManager : MonoBehaviour
         _participantsCar.GetComponent<Rigidbody>().isKinematic = false;
         _participantsCar.GetComponent<CarController>().TurnOnEngine();
     }
-    
+
     private IEnumerator ReSpawnParticipant(float seconds)
     {
         _participantsCar.GetComponent<Rigidbody>().velocity = Vector3.zero;
         _participantsCar.GetComponent<Rigidbody>().isKinematic = true;
         yield return new WaitForSeconds(seconds);
         _participantsCar.GetComponent<Rigidbody>().isKinematic = false;
-        
+
         // ConditionManager.Instance.EndEvent(false);
 
         CameraManager.Instance.AlphaFadeIn();
         _participantsCar.GetComponent<CarController>().TurnOnEngine();
     }
-    
+
     private void AssignParticipantsCar()
     {
         switch (SceneManager.GetActiveScene().name)
@@ -185,10 +229,10 @@ public class ExperimentManager : MonoBehaviour
                 _participantsCar = AutobahnManager.Instance.GetParticipantsCar();
                 break;
         }
-        
+
         PersistentTrafficEventManager.Instance.SetParticipantsCar(_participantsCar);
     }
-    
+
     #endregion
 
     #region Public Methods
@@ -198,7 +242,7 @@ public class ExperimentManager : MonoBehaviour
         _activatedEvent = false;
 
         CameraManager.Instance.AlphaFadeOut();
-        
+
         ConditionManager.Instance.EndEvent(false); // todo check
 
         PersistentTrafficEventManager.Instance.FinalizeEvent();
@@ -211,19 +255,19 @@ public class ExperimentManager : MonoBehaviour
         _participantsCar.GetComponent<AIController>().SetLocalTargetAndCurveDetection();
         StartCoroutine(ReSpawnParticipant(respawnDelay));
     }
-    
+
     // ending the experiment
     public void EndOfExperiment()
-    {        
+    {
         CameraManager.Instance.FadeOut();
 
         _participantsCar.transform.parent.gameObject.SetActive(false);
-        
+
         CalibrationManager.Instance.URIRequest();
         CalibrationManager.Instance.ExperimentEnded();
         SceneManager.LoadSceneAsync("MainMenu");
     }
-    
+
     // Reception desk for ActivationTriggers to register themselves
     public void RegisterToExperimentManager(ActivationTrigger listener)
     {
@@ -231,7 +275,7 @@ public class ExperimentManager : MonoBehaviour
     }
 
     #endregion
-    
+
     #region Setters
 
     public void SetRespawnPositionAndRotation(Vector3 position, Quaternion rotation)
@@ -239,12 +283,12 @@ public class ExperimentManager : MonoBehaviour
         _respawnPosition = position;
         _respawnRotation = rotation;
     }
-    
+
     public void SetInitialTransform(Vector3 position, Quaternion rotation)
     {
         _participantsCar.transform.SetPositionAndRotation(position, rotation);
     }
-    
+
     public void SetInitialTransform(Vector3 position)
     {
         _participantsCar.transform.SetPositionAndRotation(position, _participantsCar.transform.rotation);
@@ -259,12 +303,12 @@ public class ExperimentManager : MonoBehaviour
     {
         _activatedEvent = activationState;
     }
-    
+
     public void SetParticipantsCar(GameObject car)
     {
         _participantsCar = car;
     }
-    
+
     public void SetController(CriticalEventController criticalEventController)
     {
         _criticalEventController = criticalEventController;
@@ -281,7 +325,9 @@ public class ExperimentManager : MonoBehaviour
 
     public GameObject GetSeatPosition()
     {
-        return _participantsCar.GetComponent<CarController>().GetSeatPosition();
+        if (_participantsCar != null && _participantsCar.GetComponent<CarController>() != null)
+            return _participantsCar.GetComponent<CarController>().GetSeatPosition();
+        return null;
     }
 
     public GameObject GetParticipantsCar()
@@ -290,41 +336,44 @@ public class ExperimentManager : MonoBehaviour
     }
 
     #endregion
-    
+
     #region GUI
 
     public void OnGUI()
     {
+        // 【关键修复】如果正在中止程序，立刻停止绘制 GUI。
+        // 这能防止 OpenXR 在场景卸载期间因渲染 GUI 而崩溃。
+        if (_isAborting) return;
+
         float height = Screen.height;
         float width = Screen.width;
-        
+
         float xForButtons = width / 12f;
         float yForButtons = height / 7f;
-        
+
         float xForLable = (width / 12f);
         float yForLable = height / 1.35f;
 
         float buttonWidth = 200f;
         float buttonHeight = 30f;
-        float heightDifference = 40f;
-        
+
         int labelFontSize = 33;
 
-        
+
         // Lable
         GUI.color = Color.white;
         GUI.skin.label.fontSize = labelFontSize;
         GUI.skin.label.fontStyle = FontStyle.Bold;
-        
+
         // Buttons
         GUI.backgroundColor = Color.cyan;
         GUI.color = Color.white;
-        
+
         if (_scene == Scene.MainMenu)
         {
             if (!_isStartPressed)
             {
-                GUI.Label(new Rect(xForLable, yForLable, 500, 100),  "Main Experiment");
+                GUI.Label(new Rect(xForLable, yForLable, 500, 100), "Main Experiment");
 
                 if (GUI.Button(new Rect(xForButtons, yForButtons, buttonWidth, buttonHeight), "Start"))
                 {
@@ -334,29 +383,22 @@ public class ExperimentManager : MonoBehaviour
 
             if (_isStartPressed && _scene != Scene.Experiment)
             {
-                GUI.Label(new Rect(width / 4f, height / 8f, 500, 100),  "Main Experiment is Loading...");
+                GUI.Label(new Rect(width / 4f, height / 8f, 500, 100), "Main Experiment is Loading...");
             }
-            
+
             // Reset Button
             GUI.backgroundColor = Color.red;
             GUI.color = Color.white;
-        
-            if (GUI.Button(new Rect(xForButtons*9, yForButtons, buttonWidth, buttonHeight), "Abort"))
+
+            if (GUI.Button(new Rect(xForButtons * 9, yForButtons, buttonWidth, buttonHeight), "Abort"))
             {
-                SavingManager.Instance.StopAndSaveData(SceneManager.GetActiveScene().name);
-                CalibrationManager.Instance.AbortExperiment();
+                // 启动安全中止协程
+                StartCoroutine(AbortSequence());
             }
-        } 
+        }
         else if (_scene == Scene.Experiment)
         {
-            // GUI.backgroundColor = Color.red;
             GUI.color = Color.white;
-            
-            /*if (GUI.Button(new Rect(xForButtons*9, yForButtons, buttonWidth, buttonHeight), "End"))
-            {
-                SceneManager.LoadSceneAsync(SceneManager.GetActiveScene().name);
-                _scene = Scene.MainMenu;
-            }*/
 
             if (_activatedEvent)
             {

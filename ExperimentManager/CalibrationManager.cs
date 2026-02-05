@@ -14,7 +14,7 @@ public class CalibrationManager : MonoBehaviour
     #region Fields
 
     public static CalibrationManager Instance { get; private set; }
-    
+
     private bool _wasMainMenuLoaded;
     private bool _uUIDGenerated;
     private bool _eyeTrackerCalibrationSuccessful;
@@ -26,8 +26,8 @@ public class CalibrationManager : MonoBehaviour
     private bool _cameraModeSelected;
     private bool _steeringInputGiven;
     private bool _wasLoaded;
-    
-    
+
+
     private CalibrationData _calibrationData;
     private String _calibrationFilePath;
     private Random _random;
@@ -36,7 +36,7 @@ public class CalibrationManager : MonoBehaviour
     private string _experimentalCondition;
     private string _desktopPath;
     private string _desktopFolderPath;
-    
+
     #endregion
 
     #region PrivateMethods
@@ -53,17 +53,17 @@ public class CalibrationManager : MonoBehaviour
         {
             Destroy(gameObject);
         }
-        
+
         _desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
         _desktopFolderPath = Path.GetFullPath(Path.Combine(_desktopPath, "WestdriveLoopARData"));
-        
+
         _calibrationFilePath = GetPathForSaveFile("CalibrationData");
 
         if (!File.Exists(_desktopPath))
         {
             Directory.CreateDirectory(Path.GetFullPath(Path.Combine(_desktopPath, "WestdriveLoopARData")));
         }
-        
+
         if (File.Exists(_calibrationFilePath))
         {
             _calibrationData = LoadCalibrationFile(_calibrationFilePath);
@@ -72,23 +72,23 @@ public class CalibrationManager : MonoBehaviour
         {
             _calibrationData = new CalibrationData();
         }
-        
-        
+
+
         if (!File.Exists(GetPathForSaveFolder("Input")))
         {
             Directory.CreateDirectory(Path.GetFullPath(Path.Combine(_desktopFolderPath, "Input")));
         }
-        
+
         if (!File.Exists(GetPathForSaveFolder("EyeTracking")))
         {
             Directory.CreateDirectory(Path.GetFullPath(Path.Combine(_desktopFolderPath, "EyeTracking")));
         }
-        
+
         if (!File.Exists(GetPathForSaveFolder("ParticipantCalibrationData")))
         {
             Directory.CreateDirectory(Path.GetFullPath(Path.Combine(_desktopFolderPath, "ParticipantCalibrationData")));
         }
-        
+
         if (!File.Exists(GetPathForSaveFolder("SceneData")))
         {
             Directory.CreateDirectory(Path.GetFullPath(Path.Combine(_desktopFolderPath, "SceneData")));
@@ -116,7 +116,7 @@ public class CalibrationManager : MonoBehaviour
 
     private void DeleteCalibrationFile(string dataPath)
     {
-        if(!File.Exists(dataPath))
+        if (!File.Exists(dataPath))
         {
             Debug.Log("File not found, can not be deleted!");
         }
@@ -131,22 +131,22 @@ public class CalibrationManager : MonoBehaviour
         string jsonString = JsonUtility.ToJson(calibrationData);
         File.WriteAllText(_calibrationFilePath, jsonString);
     }
-    
+
     private string GetPathForSaveFile(string saveFileName)
     {
         return Path.Combine(_desktopFolderPath, saveFileName + ".txt");
     }
-    
+
     private string GetPathForSaveFolder(string folderName)
     {
         return Path.Combine(Path.GetFullPath(Path.Combine(_desktopFolderPath, folderName)));
     }
-    
-    
+
+
     private CalibrationData LoadCalibrationFile(string dataPath)
     {
         string jsonString;
-        if(!File.Exists(dataPath))
+        if (!File.Exists(dataPath))
         {
             Debug.Log("File not found!");
             return null;
@@ -159,8 +159,8 @@ public class CalibrationManager : MonoBehaviour
             return JsonUtility.FromJson<CalibrationData>(jsonString);
         }
     }
-    
-    
+
+
     IEnumerator GetRequest(string uri)
     {
         using (UnityWebRequest webRequest = UnityWebRequest.Get(uri))
@@ -193,9 +193,9 @@ public class CalibrationManager : MonoBehaviour
         string uri = "http://" + ipAddress + ":3000/" + "check?uid=" + guId;
         StartCoroutine(GetRequest(uri));
     }
-    
+
     public void GenerateIDAndCondition()
-    { 
+    {
         string newParticipantId = System.Guid.NewGuid().ToString();
         StoreParticipantUuid(newParticipantId);
         _uUIDGenerated = true;
@@ -205,7 +205,7 @@ public class CalibrationManager : MonoBehaviour
     private void GenerateCondition()
     {
         int conditionNumber = _random.Next(1, 5);
-        
+
         switch (conditionNumber)
         {
             case 1:
@@ -221,7 +221,7 @@ public class CalibrationManager : MonoBehaviour
                 _experimentalCondition = "BaseCondition";
                 break;
         }
-        
+
         ConditionManager.Instance.SetExperimentalCondition(_experimentalCondition);
         _calibrationData.ExperimentalCondition = _experimentalCondition;
         SaveCalibrationData();
@@ -233,7 +233,7 @@ public class CalibrationManager : MonoBehaviour
         _steeringInputGiven = true;
         SaveCalibrationData();
     }
-    
+
     public void EyeCalibration()
     {
         EyetrackingManager.Instance.StartCalibration();
@@ -243,7 +243,7 @@ public class CalibrationManager : MonoBehaviour
     {
         _eyeTrackerCalibrationSuccessful = true;
     }
-    
+
     public void EyeValidation()
     {
         SceneManager.LoadSceneAsync("EyetrackingValidation");
@@ -270,7 +270,7 @@ public class CalibrationManager : MonoBehaviour
     {
         SceneLoadingHandler.Instance.SceneChange("TrainingScene");
     }
-    
+
     public void TestDriveSuccessState(bool state, int trials)
     {
         _testDriveSuccessful = state;
@@ -281,21 +281,26 @@ public class CalibrationManager : MonoBehaviour
     {
         SceneLoadingHandler.Instance.LoadExperimentScenes();
     }
-    
+
+    // 【修复】移除危险调用，安全返回主菜单
     public void AbortExperiment()
     {
-        TimeManager.Instance.SetExperimentEndTime();
-        SceneManager.LoadSceneAsync("MainMenu");
-        MainMenu.Instance.ReStartMainMenu();
+        if (TimeManager.Instance != null)
+        {
+            TimeManager.Instance.SetExperimentEndTime();
+        }
+
+        // 直接加载场景，让 MainMenu 自己的 Awake/Start 去处理初始化
+        SceneManager.LoadScene("MainMenu");
     }
-    
+
     public void StoreSeatCalibrationData(Vector3 seatOffset)
     {
         _calibrationData.SeatCalibrationOffset = seatOffset;
         // StoreVRState(true);
         SaveCalibrationData();
     }
-    
+
     public void StoreValidationErrorData(Vector3 validationError)
     {
         _calibrationData.EyeValidationError = validationError;
@@ -314,7 +319,7 @@ public class CalibrationManager : MonoBehaviour
     {
         SaveCalibrationFile(_calibrationData);
     }
-    
+
     public void DeleteCalibrationData()
     {
         DeleteCalibrationFile(_calibrationFilePath);
@@ -335,7 +340,7 @@ public class CalibrationManager : MonoBehaviour
         {
             _calibrationData.SpecialNotes += ", " + note;
         }
-        
+
         SaveCalibrationData();
     }
 
@@ -344,9 +349,24 @@ public class CalibrationManager : MonoBehaviour
         StoreValidationErrorData(EyetrackingManager.Instance.GetEyeValidationErrorAngles());
         AddSpecialNote("EyeValidationSkipped");
     }
-    
+
+    // 【新增】手动覆盖被试ID的方法
+    public void OverwriteParticipantID(string manualID)
+    {
+        if (_calibrationData != null)
+        {
+            _calibrationData.ParticipantUuid = manualID;
+            SaveCalibrationData();
+            Debug.Log("Participant ID manually set to: " + manualID);
+        }
+        else
+        {
+            Debug.LogError("CalibrationData is null, cannot set ID!");
+        }
+    }
+
     #endregion
-    
+
     #region Setters
 
     public void SetCameraMode(bool vrModeState)
@@ -362,14 +382,14 @@ public class CalibrationManager : MonoBehaviour
     }
 
     #endregion
-    
+
     #region Getters
 
     public CalibrationData GetCalibrationData()
     {
         return _calibrationData;
     }
-    
+
     public bool GetWasMainMenuLoaded()
     {
         return _wasMainMenuLoaded;
@@ -379,7 +399,7 @@ public class CalibrationManager : MonoBehaviour
     {
         return _cameraModeSelected;
     }
-    
+
     public bool GetSteeringInputSelectedState()
     {
         return _steeringInputGiven;
@@ -434,7 +454,7 @@ public class CalibrationManager : MonoBehaviour
     {
         return _calibrationData.VRmode;
     }
-        
+
     public bool GetVRActivationState()
     {
         return GetVRModeState();
@@ -451,6 +471,6 @@ public class CalibrationManager : MonoBehaviour
     {
         return _endOfExperiment;
     }
-    
+
     #endregion
 }

@@ -25,10 +25,10 @@ public class SceneLoadingHandler : MonoBehaviour
         {
             Destroy(gameObject);
         }
-        
+
         SceneManager.sceneLoaded += OnSceneLoaded;
     }
-    
+
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         AssignParticipantsCarAndSeatPosition();
@@ -39,20 +39,12 @@ public class SceneLoadingHandler : MonoBehaviour
             CameraManager.Instance.SetSeatPosition(_seatPosition);
             SavingManager.Instance.SetParticipantCar(_participantsCar);
         }
-        
-        /*if (_participantsCar !=null)
-        {
-            if (SceneManager.GetActiveScene().name != "SceneLoader")
-                _participantsCar.GetComponent<CarWindows>().SetInsideWindowsAlphaChannel(0);
-            else
-                _participantsCar.GetComponent<CarWindows>().SetInsideWindowsAlphaChannel(1);
-        }*/
     }
 
     private void Start()
     {
         AssignParticipantsCarAndSeatPosition();
-        
+
         if (CameraManager.Instance != null)
         {
             CameraManager.Instance.SetObjectToFollow(_participantsCar);
@@ -67,7 +59,7 @@ public class SceneLoadingHandler : MonoBehaviour
         CameraManager.Instance.FadeOut();
         StartCoroutine(LoadExperimentScenesAsyncAdditive());
     }
-    
+
     public void SceneChange(string targetScene)
     {
         CameraManager.Instance.FadeOut();
@@ -76,73 +68,72 @@ public class SceneLoadingHandler : MonoBehaviour
 
     IEnumerator LoadScenesAsync(string targetScene)
     {
-        // Debug.Log(targetScene);
         yield return new WaitForSeconds(2);
         Debug.Log("Loading...");
-        
+
         AsyncOperation operation = SceneManager.LoadSceneAsync(targetScene);
 
         while (!operation.isDone)
         {
             float progress = Mathf.Clamp01(operation.progress / .9f);
-            // Debug.Log(operation.progress);
 
             if (progress >= .9f)
             {
                 CameraManager.Instance.FadeOut();
             }
-            
+
             yield return null;
         }
-        
+
         AssignParticipantsCarAndSeatPosition();
         CameraManager.Instance.OnSceneLoaded(true);
     }
-    
+
     public IEnumerator LoadExperimentScenesAsyncAdditive()
     {
         _isLoadAdditiveModeRunning = true;
         Application.backgroundLoadingPriority = ThreadPriority.Low;
-        
-        // AsyncOperationHandle op1 = Addressables.LoadSceneAsync("MountainRoad");
-        AsyncOperation opMountainRoad = SceneManager.LoadSceneAsync("MountainRoad");
 
-        // opMountainRoad.allowSceneActivation = false;
-        
-        while (!opMountainRoad.isDone)
+        // 【修改 1】首先加载 Autobahn 作为主场景（Active Scene）
+        AsyncOperation opAutobahn = SceneManager.LoadSceneAsync("Autobahn");
+
+        while (!opAutobahn.isDone)
         {
             yield return null;
         }
-        
-        // opMountainRoad.allowSceneActivation = true;
 
+        // 加载其他场景（保持 Westbrueck 和 CountryRoad 不变）
         AsyncOperation op2 = SceneManager.LoadSceneAsync("Westbrueck", LoadSceneMode.Additive);
 
         while (!op2.isDone)
         {
             yield return null;
         }
-        
+
         AsyncOperation op3 = SceneManager.LoadSceneAsync("CountryRoad", LoadSceneMode.Additive);
-        
+
         while (!op3.isDone)
         {
             yield return null;
         }
-        
-        AsyncOperation op4 = SceneManager.LoadSceneAsync("Autobahn", LoadSceneMode.Additive);
-        
+
+        // 【修改 2】最后加载 MountainRoad 作为附加场景（原先它是主场景）
+        AsyncOperation op4 = SceneManager.LoadSceneAsync("MountainRoad", LoadSceneMode.Additive);
+
         while (!op4.isDone)
         {
             yield return null;
         }
 
-        _participantsCar = MountainRoadManager.Instance.GetParticipantsCar();
-        _seatPosition = MountainRoadManager.Instance.GetSeatPosition();
+        // 【修改 3】确保获取的是 Autobahn 场景里的车和座位
+        // 之前这里写死的是 MountainRoadManager
+        _participantsCar = AutobahnManager.Instance.GetParticipantsCar();
+        _seatPosition = AutobahnManager.Instance.GetSeatPosition();
+
         _isLoadAdditiveModeRunning = false;
         CameraManager.Instance.OnSceneLoaded(false);
     }
-    
+
     private void AssignParticipantsCarAndSeatPosition()
     {
         switch (SceneManager.GetActiveScene().name)
@@ -182,7 +173,7 @@ public class SceneLoadingHandler : MonoBehaviour
         AssignParticipantsCarAndSeatPosition();
         return _participantsCar;
     }
-    
+
     public GameObject GetSeatPosition()
     {
         AssignParticipantsCarAndSeatPosition();
@@ -194,5 +185,3 @@ public class SceneLoadingHandler : MonoBehaviour
         return _isLoadAdditiveModeRunning;
     }
 }
-
-
