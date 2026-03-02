@@ -18,7 +18,7 @@ public class VrcftDataHandler : MonoBehaviour
 
     [Header("调试开关")]
     [Tooltip("是否在游戏屏幕左上角显示诊断信息")]
-    public bool showOnScreenDebug = true; // --- 这里就是你要的开关 ---
+    public bool showOnScreenDebug = true;
 
     // --- 实时数据 (供 EyeTrackingConnector 调用) ---
     public float LeftEyeX { get; private set; }
@@ -34,6 +34,10 @@ public class VrcftDataHandler : MonoBehaviour
     private bool _isRunning = false;
     private StreamWriter _writer;
     private object _lock = new object();
+
+    // --- 新增：跨线程安全的同步变量 ---
+    private volatile int _threadSafeMarker = 0;
+    private long _threadSafeUnixTime = 0;
 
     // 线程安全计时器
     private Stopwatch _stopwatch = new Stopwatch();
@@ -55,6 +59,17 @@ public class VrcftDataHandler : MonoBehaviour
         _stopwatch.Start(); // 启动计时
         SetupFile();
         StartListening();
+    }
+
+    // --- 新增 Update 方法：只有主线程能安全地找 SyncManager 拿数据 ---
+    private void Update()
+    {
+        if (SyncManager.Instance != null)
+        {
+            _threadSafeMarker = SyncManager.Instance.CurrentFrameMarker;
+        }
+        // 使用纯 C# 获取绝对时间，精度极高
+        _threadSafeUnixTime = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
 
     private void OnDestroy()
@@ -109,7 +124,8 @@ public class VrcftDataHandler : MonoBehaviour
             var fs = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
             _writer = new StreamWriter(fs, Encoding.UTF8);
             _writer.AutoFlush = true; // 保持开启，防丢失
-            _writer.WriteLine("Time,LeftEyeX,LeftEyeY,LeftOpen,RightEyeX,RightEyeY,RightOpen");
+            // --- [修改] 表头加入 Marker ---
+            _writer.WriteLine("Time,LeftEyeX,LeftEyeY,LeftOpen,RightEyeX,RightEyeY,RightOpen,AbsoluteUnixTime,EventMarker");
             _debugStatus = "CSV 记录中...";
         }
         catch (Exception e)
@@ -226,7 +242,10 @@ public class VrcftDataHandler : MonoBehaviour
         {
             // 使用线程安全的 Stopwatch 获取时间
             double currentTime = _stopwatch.Elapsed.TotalSeconds;
-            string line = $"{currentTime:F4},{LeftEyeX:F4},{LeftEyeY:F4},{LeftOpenness:F3},{RightEyeX:F4},{RightEyeY:F4},{RightOpenness:F3}";
+
+            // --- [新增] 把跨线程安全的时间和 Marker 拼接到这行数据的最后 ---
+            string line = $"{currentTime:F4},{LeftEyeX:F4},{LeftEyeY:F4},{LeftOpenness:F3},{RightEyeX:F4},{RightEyeY:F4},{RightOpenness:F3},{_threadSafeUnixTime},{_threadSafeMarker}";
+
             lock (_lock)
             {
                 if (_writer != null) _writer.WriteLine(line);

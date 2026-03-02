@@ -25,7 +25,8 @@ public class SceneDataRecorder : MonoBehaviour
         _eventBehaviourDataFrames = new List<EventBehaviourDataFrame>();
     }
 
-    public void AssignEventData(string eventName, double startTime, double endTime, bool successState, string hitObject=null)
+    // 替换原有的 AssignEventData 方法
+    public void AssignEventData(string eventName, double mrTime, float configuredInterval, double torTime, double endTime, bool successState, string hitObject = null)
     {
         EventBehaviourDataFrame eventBehaviour = new EventBehaviourDataFrame();
 
@@ -36,9 +37,11 @@ public class SceneDataRecorder : MonoBehaviour
         }
 
         eventBehaviour.EventName = eventName;
-        eventBehaviour.StartofEventTimeStamp = startTime;
+        eventBehaviour.MRTimeStamp = mrTime;                       // 写入MR时间
+        eventBehaviour.ConfiguredMRInterval = configuredInterval;  // 写入设定的条件秒数
+        eventBehaviour.StartofEventTimeStamp = torTime;            // 写入ToR时间
         eventBehaviour.EndOfEventTimeStamp = endTime;
-        eventBehaviour.EventDuration = endTime - startTime;
+        eventBehaviour.EventDuration = endTime - torTime;
         eventBehaviour.SuccessfulCompletionState = successState;
         eventBehaviour.HitObjectName = hitObject;
 

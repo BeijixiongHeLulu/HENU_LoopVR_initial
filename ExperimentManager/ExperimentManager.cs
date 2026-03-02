@@ -193,6 +193,13 @@ public class ExperimentManager : MonoBehaviour
         CameraManager.Instance.FadeIn();
         yield return new WaitForSeconds(startExperimentDelay);
         _participantsCar.GetComponent<Rigidbody>().isKinematic = false;
+        // ================== 【开始修改】请在此处插入以下代码 ==================
+        // 【Plan A 修复】实验正式开始瞬间，立刻记录当前位置为“第一复活点”
+        // 这样即使出门就撞车（还没碰到任何 Checkpoint），也会回到起跑线，而不是飞到 (0,0,0)
+        _respawnPosition = _participantsCar.transform.position;
+        _respawnRotation = _participantsCar.transform.rotation;
+        // ================== 【修改结束】 ====================================
+
         _participantsCar.GetComponent<CarController>().TurnOnEngine();
     }
 
@@ -231,6 +238,12 @@ public class ExperimentManager : MonoBehaviour
         }
 
         PersistentTrafficEventManager.Instance.SetParticipantsCar(_participantsCar);
+        // 【新增修复代码】：必须同时更新 SavingManager 的车！
+        // 防止 SavingManager 操作已销毁的旧车导致崩溃
+        if (SavingManager.Instance != null)
+        {
+            SavingManager.Instance.SetParticipantCar(_participantsCar);
+        }
     }
 
     #endregion

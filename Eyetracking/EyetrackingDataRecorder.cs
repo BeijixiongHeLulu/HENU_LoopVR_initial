@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.IO; // 新增这一行，用于文件写入
 // 【修改 1】移除 Tobii 引用，防止编译错误
 // using Tobii.XR;
 // using ViveSR.anipal.Eye;
@@ -17,6 +18,10 @@ public class EyetrackingDataRecorder : MonoBehaviour
     private EyetrackingManager _eyetrackingManager;
     private Transform _hmdTransform;
     private bool recordingEnded;
+    // --- 新增：实时文件流 ---
+    private StreamWriter _writer;
+    private string _csvPath;
+
 
     void Start()
     {
@@ -43,12 +48,34 @@ public class EyetrackingDataRecorder : MonoBehaviour
     public void StartRecording()
     {
         recordingEnded = false;
+
+        // --- 新增：初始化实时 CSV 写入 ---
+        string folderPath = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop), "WestdriveLoopARData", "EyeTracking_Realtime");
+        if (!System.IO.Directory.Exists(folderPath)) System.IO.Directory.Exists(folderPath); // 修复笔误，应为 CreateDirectory
+        if (!System.IO.Directory.Exists(folderPath)) System.IO.Directory.CreateDirectory(folderPath);
+
+        _csvPath = System.IO.Path.Combine(folderPath, $"EyeTracking_Realtime_{System.DateTime.Now:yyyyMMdd_HHmmss}.csv");
+        _writer = new StreamWriter(_csvPath, true);
+        _writer.AutoFlush = true; // 开启实时刷写防崩溃！
+
+        // 写入极其清晰的表头
+        _writer.WriteLine("UnixTimeStamp,AbsoluteUnixTime,EventMarker,FPS,GazePosX,GazePosY,GazePosZ,GazeDirX,GazeDirY,GazeDirZ,LeftBlink,RightBlink");
+
         StartCoroutine(RecordEyeTrackingData());
     }
 
     public void StopRecording()
     {
         recordingEnded = true;
+
+        // --- 新增：安全关闭文件流 ---
+        if (_writer != null)
+        {
+            _writer.Flush();
+            _writer.Close();
+            _writer = null;
+            Debug.Log($"<color=green>[眼动记录] 实时 CSV 已安全保存至: {_csvPath}</color>");
+        }
     }
 
     public void ClearEyeTrackingDataRecordings()
@@ -113,9 +140,27 @@ public class EyetrackingDataRecorder : MonoBehaviour
                 dataFrame.NoseVector = EyetrackingManager.Instance.GetHmdTransform().forward;
             }
 
+            // ==========================================================
+            // --- [新增] 注入全局绝对时间和当前帧的脉冲 Marker ---
+            // ==========================================================
+            if (SyncManager.Instance != null)
+            {
+                dataFrame.AbsoluteUnixTime = SyncManager.Instance.GetAbsoluteUnixTime();
+                dataFrame.EventMarker = SyncManager.Instance.CurrentFrameMarker;
+            }
+
             _frameRates.Add(dataFrame.FPS);
             _recordedEyeTrackingData.Add(dataFrame);
             frameCounter++;
+
+            if (_writer != null)
+            {
+                string line = $"{dataFrame.UnixTimeStamp},{dataFrame.AbsoluteUnixTime},{dataFrame.EventMarker},{dataFrame.FPS}," +
+                              $"{dataFrame.EyePosWorldCombined.x:F4},{dataFrame.EyePosWorldCombined.y:F4},{dataFrame.EyePosWorldCombined.z:F4}," +
+                              $"{dataFrame.EyeDirWorldCombined.x:F4},{dataFrame.EyeDirWorldCombined.y:F4},{dataFrame.EyeDirWorldCombined.z:F4}," +
+                              $"{dataFrame.LeftEyeIsBlinkingWorld},{dataFrame.RightEyeIsBlinkingWorld}";
+                _writer.WriteLine(line);
+            }
 
             yield return new WaitForSeconds(_sampleRate);
         }

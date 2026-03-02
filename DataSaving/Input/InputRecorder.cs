@@ -60,13 +60,21 @@ public class InputRecorder : MonoBehaviour
                 inputDataFrame.AcellerationInput = 0f;
                 inputDataFrame.BrakeInput = 0f;
             }
+
+            // [修复点] 将 frame 改为 inputDataFrame
+            if (SyncManager.Instance != null)
+            {
+                inputDataFrame.AbsoluteUnixTime = SyncManager.Instance.GetAbsoluteUnixTime();
+                inputDataFrame.EventMarker = SyncManager.Instance.CurrentFrameMarker;
+            }
+
             InputDataFrames.Add(inputDataFrame);
 
-            // --- 2. 新增：实时写入 CSV ---
+            // --- 2. 新增：实时写入 CSV (带上绝对时间和 Marker！) ---
             if (_writer != null)
             {
-                // 格式: UnixTimestamp, Steering, Acceleration, Brake
-                string line = $"{timestamp:F6},{_steeringInput:F4},{_accelerationInput:F4},{_brakeInput:F4}";
+                // 格式: UnixTimestamp, Steering, Acceleration, Brake, AbsoluteUnixTime, EventMarker
+                string line = $"{timestamp:F6},{_steeringInput:F4},{_accelerationInput:F4},{_brakeInput:F4},{inputDataFrame.AbsoluteUnixTime},{inputDataFrame.EventMarker}";
                 _writer.WriteLine(line);
             }
 
@@ -117,8 +125,8 @@ public class InputRecorder : MonoBehaviour
         {
             _writer = new StreamWriter(_csvPath, true); // 追加模式
             _writer.AutoFlush = true; // 关键：实时刷写到硬盘
-            // 写表头
-            _writer.WriteLine("UnixTimeStamp,Steering,Acceleration,Brake");
+                                      // 写表头
+            _writer.WriteLine("UnixTimeStamp,Steering,Acceleration,Brake,AbsoluteUnixTime,EventMarker");
             Debug.Log($"[InputRecorder] 实时 CSV 已创建: {_csvPath}");
         }
         catch (Exception e)

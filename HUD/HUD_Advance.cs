@@ -12,6 +12,8 @@ public class HUD_Advance : MonoBehaviour
 
 
     public AudioSource audioSource;
+    [Header("MR Audio Setting")]
+    public AudioClip MR_Voice_Sound; // 专门放你的 MR_voice.mp3
 
     public RawImage WarningTriangle;
     public Text WarningText;
@@ -589,6 +591,19 @@ public class HUD_Advance : MonoBehaviour
             //MaxSpeed
             MaxSpeed.text = speedLimit + "";
             // Weather.text = "Westbrueck \n 22°C";
+        }
+    }
+    // --- 【新增：播放MR语音的方法】 ---
+    public void PlayMRWarning()
+    {
+        if (MR_Voice_Sound != null && audioSource != null)
+        {
+            audioSource.PlayOneShot(MR_Voice_Sound);
+            Debug.Log("【HUD_Advance】已成功播放 MR 语音！");
+        }
+        else
+        {
+            Debug.LogWarning("【HUD_Advance】警告：MR_Voice_Sound 未赋值，或找不到 audioSource！");
         }
     }
 }

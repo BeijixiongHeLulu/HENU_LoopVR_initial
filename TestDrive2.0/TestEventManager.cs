@@ -196,9 +196,28 @@ public class TestEventManager : MonoBehaviour
     public IEnumerator ActivateHUD()
     {
         advanced_HUD.ManualDrive();
-        advanced_HUD.DriverAlert();
+        advanced_HUD.DriverAlert(); // 这是第一阶段的提示
+
+        // --- [新增] 发出 MR Marker 8 ---
+        if (SyncManager.Instance != null)
+        {
+            // 实时获取当前车速 (m/s 转换成 km/h)
+            float currentSpeed = _participantCar.GetComponent<Rigidbody>().velocity.magnitude * 3.6f;
+            // 注意：距离(0f)目前是占位符，以后加入随机逻辑后请替换这里的参数
+            SyncManager.Instance.TriggerEvent(8, currentSpeed, 0f, timeBeforeObjectsGetMarked);
+        }
+
+        // 等待设定的间隔时间
         yield return new WaitForSecondsRealtime(timeBeforeObjectsGetMarked);
-       advanced_HUD.ActivateHUD(eventObjectsToMark);
+
+        advanced_HUD.ActivateHUD(eventObjectsToMark); // 这是第二阶段真正的接管请求
+
+        // --- [新增] 发出 ToR Marker 9 ---
+        if (SyncManager.Instance != null)
+        {
+            float currentSpeed = _participantCar.GetComponent<Rigidbody>().velocity.magnitude * 3.6f;
+            SyncManager.Instance.TriggerEvent(9, currentSpeed, 0f, timeBeforeObjectsGetMarked);
+        }
     }
 
     public void DeactivateHUD()

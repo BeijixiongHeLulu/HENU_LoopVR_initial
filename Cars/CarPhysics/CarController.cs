@@ -68,7 +68,7 @@ public class CarController : MonoBehaviour
 
         float thrustTorque = CalculateThrustTorque(acceleration);
         //wheelCol.motorTorque = acceelelartionBoost*   thrustTorque;
-        wheelCol.motorTorque = Mathf.Clamp(thrustTorque,0, _maximumSpeed);
+        wheelCol.motorTorque = Mathf.Clamp(thrustTorque, -_maximumSpeed, _maximumSpeed);
         /*Debug.Log( "Torque: " + wheelCol.motorTorque + ", rpm: " +    wheelCol.rpm);*/
         wheelCol.brakeTorque = brake;
     }

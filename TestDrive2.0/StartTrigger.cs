@@ -16,19 +16,19 @@ public class StartTrigger : MonoBehaviour
     private IEnumerator Triggered(Collider other)
     {
         other.gameObject.GetComponent<CarController>().TurnOffEngine();
-
-        //other.gameObject.GetComponent<ManualController>().enabled = false;
-        // Debug.Log("Before Waiting Start");
         yield return new WaitForSecondsRealtime(3);
-        // Debug.Log("After Waiting Start");
-
         other.gameObject.GetComponent<CarController>().TurnOnEngine();
-        
-        //other.gameObject.GetComponent<ManualController>().enabled = true;
-        other.gameObject.GetComponent<AimedSpeed>().SetRuleSpeed(aimedSpeed/3.6f);
+
+        other.gameObject.GetComponent<AimedSpeed>().SetRuleSpeed(aimedSpeed / 3.6f);
         other.gameObject.GetComponent<AIController>().SetLocalTargetAndCurveDetection();
         other.gameObject.GetComponent<ControlSwitch>().SwitchControl(false);
         GetComponent<BoxCollider>().enabled = false;
+
+        // --- [新增] 实验路段/回合正式开始，发出 Marker 4 ---
+        if (SyncManager.Instance != null)
+        {
+            SyncManager.Instance.TriggerEvent(4);
+        }
     }
 
 }

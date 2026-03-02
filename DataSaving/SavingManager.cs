@@ -149,6 +149,11 @@ public class SavingManager : MonoBehaviour
     {
         _readyToSaveToFile = false;
         Debug.Log("<color=green>Recording Data...</color>");
+        // 【新增修复代码】关键！
+        // 每次开始录制前，强制刷新 SceneDataRecorder 的引用。
+        // 确保我们连接的是当前场景里“活着”的那个 Recorder，而不是上一次实验残留的“尸体”。
+        _sceneDataRecorder = SceneDataRecorder.Instance;
+
         _inputRecorder.SetParticipantCar(participantCar);
         _inputRecorder.StartInputRecording();
         EyetrackingManager.Instance.StartRecording();

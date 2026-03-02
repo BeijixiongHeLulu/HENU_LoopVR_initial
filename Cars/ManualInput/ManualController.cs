@@ -12,6 +12,8 @@ public class ManualController : MonoBehaviour
     private CarController _carController;
     private bool _manualDriving = false;
     private bool toggleReverse;
+    // 在 private bool toggleReverse; 下面添加这行代码：
+    private bool _isClutchPressedDown = false;
     private SteeringWheelForceFeedback steeringWheelForceFeedback;
    
     private int _RealInputController;
@@ -45,6 +47,7 @@ public class ManualController : MonoBehaviour
         
         SetInputSource(CalibrationManager.Instance.GetSteeringInputDevice());
         // Debug.Log("the control index was at start : " + InputControlIndex);
+
     }
 
     // Update is called once per frame
@@ -69,17 +72,34 @@ public class ManualController : MonoBehaviour
                     }
                     break;
             case InputType.SteeringWheel:
-                    steeringInput=  Mathf.Clamp(Input.GetAxis("Horizontal (Steering)"),-1f,1f);
-                    //Debug.Log(Input.GetAxis("Horizontal (Steering)"));
-                    accelerationInput = Mathf.Clamp01(Input.GetAxis("Pedal0"));
-                    brakeInput = Mathf.Clamp01(Input.GetAxis("Pedal1"));
-                   // reverse = Input.GetAxis("Fire3");
-                    /*if (Input.GetButtonDown("ShifterLeft"))
+                steeringInput = Mathf.Clamp(Input.GetAxis("Horizontal (Steering)"), -1f, 1f);
+                accelerationInput = Mathf.Clamp01(Input.GetAxis("Pedal0"));
+                brakeInput = Mathf.Clamp01(Input.GetAxis("Pedal1"));
+
+                // --- 新增：换挡拨片触发倒挡切换 ---
+                try
+                {
+                    // GetButtonDown 保证了按住不放也只触发一次切换
+                    if (Input.GetButtonDown("PaddleShifter"))
                     {
-                        Debug.Log("reverse!");
-                        toggleReverse =! toggleReverse;
-                    }*/
-                    break;
+                        // 安全锁：只有当车速小于 2km/h (几乎静止) 时，才允许切换倒挡
+                        if (Mathf.Abs(_carController.GetCurrentSpeedInKmH()) < 2f)
+                        {
+                            toggleReverse = !toggleReverse;
+                            Debug.Log($"【档位切换】当前状态: {(toggleReverse ? "倒挡 (R)" : "前进挡 (D)")}");
+                        }
+                        else
+                        {
+                            Debug.LogWarning("【切挡失败】车速过快！请将车辆完全刹停后再按拨片切换倒挡！");
+                        }
+                    }
+                }
+                catch
+                {
+                    // 防止你在 Input Manager 还没配置好 "PaddleShifter" 时编辑器疯狂报错 
+                }
+                // ----------------------------------------
+                break;
         }
         
         if (toggleReverse)

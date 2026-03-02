@@ -19,7 +19,9 @@ using UnityEngine;
     public Vector3 EyePosLocalCombined;
     public Vector3 EyeDirLocalCombined;
 
-    
+    [Header("Sync Data")]
+    public long AbsoluteUnixTime;
+    public int EventMarker;
 
     public bool RightEyeIsBlinkingWorld;        //why though?
     public bool RightEyeIsBlinkingLocal;

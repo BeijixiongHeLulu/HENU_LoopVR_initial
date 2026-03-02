@@ -10,4 +10,7 @@ using UnityEngine;
     public float SteeringInput;
     public float AcellerationInput;
     public float BrakeInput;
+
+    public long AbsoluteUnixTime;
+    public int EventMarker;
 }

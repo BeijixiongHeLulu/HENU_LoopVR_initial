@@ -38,4 +38,12 @@ public class TrafficEventTrigger : MonoBehaviour
     {
         _eventController = eventController;
     }
+
+    // 在 SetController 方法下面，增加这个重置方法
+    public void ResetTrigger()
+    {
+        // 清空缓存，允许同一辆车在下一圈重新触发
+        _currentTarget = null;
+    }
+
 }

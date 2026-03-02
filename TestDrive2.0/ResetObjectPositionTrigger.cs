@@ -37,26 +37,45 @@ public class ResetObjectPositionTrigger : MonoBehaviour
                 TrainingHandler.Instance.GoToMainExperiment();
                 _resetPosition = respawnPointTrialFailed.transform;
             }
-            
+
             ResetCar(other.gameObject);
             trialsDone.ApplyChange(1);
+
+            // --- [新增] 车辆被强制传送到原点，发出 Marker 12 ---
+            if (SyncManager.Instance != null)
+            {
+                SyncManager.Instance.TriggerEvent(12);
+            }
 
             StartCoroutine(TakeAwayControl(other));
         }
     }
-    
+
     private void ResetCar(GameObject objectToReset)
     {
-        // objectToReset.SetActive(false);
-        
-        // objectToReset.transform.SetPositionAndRotation(_resetPosition.position, _resetPosition.rotation);
-
+        // 1. 物理层深度清洗 (清理轮胎打滑和角速度残留)
         objectToReset.GetComponent<CarController>().TurnOffEngine();
-        objectToReset.GetComponent<Rigidbody>().isKinematic = true;
-        objectToReset.GetComponent<Rigidbody>().velocity = Vector3.zero;
-        // objectToReset.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
+        Rigidbody rb = objectToReset.GetComponent<Rigidbody>();
+        rb.isKinematic = true;
+        rb.velocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero; // 加上这句，防止带着旋转惯性传送
 
         objectToReset.transform.SetPositionAndRotation(_resetPosition.position, _resetPosition.rotation);
+
+        // 2. AI 脑部清洗
+        AIController ai = objectToReset.GetComponent<AIController>();
+        if (ai != null)
+        {
+            // 强迫 AI 重新扫描脚下最近的贝塞尔曲线点，而不是记忆里的那个点
+            ai.SetLocalTargetAndCurveDetection();
+        }
+
+        // 3. 速度限制清洗 (请确保这里的数字是你刚起步时的期望速度)
+        AimedSpeed aimed = objectToReset.GetComponent<AimedSpeed>();
+        if (aimed != null)
+        {
+            aimed.SetRuleSpeed(50f / 3.6f); // 比如重置回 50km/h
+        }
     }
 
     private IEnumerator TakeAwayControl(Collider other)
